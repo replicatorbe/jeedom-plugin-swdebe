@@ -1,0 +1,12 @@
+core/config/common.config.php
+data/
+nbproject/
+node_modules/
+test.php
+sftp-config.json
+.project
+.remote-sync.json
+.vscode/
+.DS_Store
+Thumbs.db
+*.php~
