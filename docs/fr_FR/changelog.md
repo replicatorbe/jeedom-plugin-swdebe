@@ -24,5 +24,5 @@
   détail.
 - Commandes exposées : état binaire, compteur, titre, perturbation, dates de
   début et de fin, localité, URL, détails JSON, bouton rafraîchir.
-- Cron 15 min (configurable, minimum 5 min).
+- Cron 15 min (configurable, minimum 15 min).
 - Cache 6 h des détails d'incident, backoff 1 h après échec.

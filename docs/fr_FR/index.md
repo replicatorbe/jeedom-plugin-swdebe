@@ -25,8 +25,8 @@ commandes.
 
 - **Délai d'attente des requêtes** : secondes avant d'abandonner un appel au
   site SWDE (défaut 10).
-- **Fréquence de rafraîchissement** : minutes entre deux lectures (défaut 15,
-  minimum 5).
+- **Fréquence de rafraîchissement** : minutes entre deux lectures (défaut et
+  minimum 15 : le plugin ne lit pas le site plus souvent).
 
 ### Ajouter un code postal
 

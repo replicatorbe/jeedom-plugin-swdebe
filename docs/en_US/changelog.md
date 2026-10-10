@@ -22,5 +22,5 @@
 - Detection via the site's JSON autocomplete + search page + detail pages.
 - Exposed commands: binary state, counter, title, disturbance, start/end
   dates, locality, URL, JSON details, refresh button.
-- 15 min cron (configurable, min 5 min).
+- 15 min cron (configurable, min 15 min).
 - 6 h cache on incident details, 1 h backoff after a failure.

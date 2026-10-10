@@ -24,7 +24,8 @@ configured postal codes, and updates its commands accordingly.
 
 - **Request timeout**: seconds before giving up on an HTTP call to the SWDE
   site (default 10).
-- **Refresh frequency**: minutes between two reads (default 15, minimum 5).
+- **Refresh frequency**: minutes between two reads (default and minimum 15:
+  the plugin never reads the site more often).
 
 ### Add a postal code
 
