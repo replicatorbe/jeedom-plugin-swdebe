@@ -540,9 +540,12 @@ class swdebe extends eqLogic {
         // un re-déclenchement à chaque cycle (son identité changerait à chaque
         // lecture). On l'ignore pour la mémoire.
         $valid = array();
+        $unparsed = 0;
         foreach ($_incidents as $incident) {
             if (isset($incident['nodeId']) && (int) $incident['nodeId'] > 0) {
                 $valid[(int) $incident['nodeId']] = $incident;
+            } else {
+                $unparsed++;
             }
         }
         $currentIds = array_keys($valid);
@@ -558,6 +561,15 @@ class swdebe extends eqLogic {
 
         $newIds        = array_diff($currentIds, $lastIds);
         $disappearedIds = array_diff($lastIds, $currentIds);
+
+        // Un détail illisible ne dit pas quel incident il est : il peut s'agir
+        // d'un incident déjà connu. Le déclarer terminé ferait partir les
+        // alertes de fin, puis celles de début au cycle suivant. On attend
+        // une lecture complète pour conclure à une disparition.
+        if ($unparsed > 0) {
+            $disappearedIds = array();
+            $currentIds = array_values(array_unique(array_merge($currentIds, $lastIds)));
+        }
 
         // Mémoire mise à jour tout de suite : si une alerte part en fatal, on
         // ne relance pas sa famille à chaque cron.

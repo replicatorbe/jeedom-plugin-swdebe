@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- An incident whose detail page could not be read is no longer taken for a
+  finished one: end actions no longer fire by mistake, and the start alert is
+  no longer replayed on the next cycle.
+
 ## 0.2 — built-in alerts
 
 - New **Alerts** tab on every device: when a new incident appears on the

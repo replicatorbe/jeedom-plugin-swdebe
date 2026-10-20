@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 0.2.1
+
+- Un incident dont la fiche détaillée n'a pas pu être lue n'est plus pris
+  pour un incident terminé : les actions de fin ne partent plus à tort, et
+  l'alerte de début n'est plus rejouée au cycle suivant.
+
 ## 0.2 — alertes intégrées
 
 - Nouvel onglet **Alertes** sur chaque équipement : à l'apparition d'un
