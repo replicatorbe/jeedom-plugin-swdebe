@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.2
+
+- New **Last check**, **Read error** and **Last error** commands: when swde.be
+  stops answering, the previous state is still shown but no longer silently —
+  the date of the last successful read is visible and the error stays raised
+  until the next one, backoff included.
+- During an error, the republished state no longer counts as a
+  communication: the device timeout, set to 60 minutes when empty, reports a
+  stuck read.
+- Health page: age of the last successful read and last error of each
+  device.
+
 ## 0.2.1
 
 - An incident whose detail page could not be read is no longer taken for a

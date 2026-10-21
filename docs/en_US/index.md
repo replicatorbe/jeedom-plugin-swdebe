@@ -50,6 +50,9 @@ configured postal codes, and updates its commands accordingly.
 | **Locality** | info / string | commune reported by SWDE |
 | **Incident URL** | info / string | direct link to the SWDE page |
 | **Details (JSON)** | info / string | full structured incident list |
+| **Last check** | info / string | date of the last successful read of swde.be |
+| **Read error** | info / binary | 1 while the last read failed (incidents shown are then those of the last check) |
+| **Last error** | info / string | date and message of the current failure, empty otherwise |
 | **Refresh** | action | force an immediate reload |
 
 ## How it works

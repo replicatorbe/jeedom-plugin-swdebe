@@ -49,6 +49,11 @@ class swdebe extends eqLogic {
      * chaque cycle de rafraîchissement. */
     const DETAIL_TTL = 21600;
 
+    /* Délai sans communication au-delà duquel le cœur signale l'équipement :
+     * une lecture en échec ne rafraîchit plus la date de communication (voir
+     * publishCmd), une heure couvre un backoff complet. */
+    const TIMEOUT_MINUTES = 60;
+
     /*
      * Blocs du cœur qu'une alerte ne doit pas jouer. « Attendre », « Pause »,
      * « Faire une demande » et les rapports retiennent leur processus pendant
@@ -81,6 +86,9 @@ class swdebe extends eqLogic {
      * une erreur mais une protection.
      */
     private $_refreshInfo = '';
+
+    /* Une erreur de lecture est en cours : l'état republié est périmé. */
+    private $_stale = false;
 
     /* ======================================================================= CRON */
 
@@ -127,6 +135,12 @@ class swdebe extends eqLogic {
          * titre d'incident lisible. L'utilisateur reste libre de redimensionner. */
         if ($this->getDisplay('width') == '') {
             $this->setDisplay('width', '320px');
+        }
+
+        /* Posé une seule fois, comme meteobelgiqueirm : ensuite c'est le
+         * choix de l'utilisateur. */
+        if ((int) $this->getTimeout() === 0) {
+            $this->setTimeout(self::TIMEOUT_MINUTES);
         }
     }
 
@@ -188,9 +202,27 @@ class swdebe extends eqLogic {
         return 'swdebe::retry::' . $this->getId();
     }
 
+    /* Dernière erreur de lecture, sans expiration contrairement à retryKey :
+     * elle reste affichée jusqu'au prochain succès, backoff compris. */
+    private function errorKey() {
+        return 'swdebe::error::' . $this->getId();
+    }
+
     private function clearState() {
         cache::delete($this->stateKey());
         cache::delete($this->retryKey());
+        cache::delete($this->errorKey());
+    }
+
+    /* { message, at } de la dernière lecture en échec, ou un tableau vide si
+     * la dernière lecture a réussi. */
+    public function getLastError() {
+        $value = cache::byKey($this->errorKey())->getValue('');
+        if ($value === '') {
+            return array();
+        }
+        $error = json_decode($value, true);
+        return is_array($error) ? $error : array();
     }
 
     /*
@@ -308,6 +340,18 @@ class swdebe extends eqLogic {
             'order'     => $order++,
             'isVisible' => 0,
         ));
+        $this->addCmdIfMissing('derniere_verification', 'Dernière vérification', 'info', 'string', array(
+            'order' => $order++,
+            'icon'  => 'fas fa-clock',
+        ));
+        $this->addCmdIfMissing('erreur', 'Erreur de lecture', 'info', 'binary', array(
+            'order' => $order++,
+            'icon'  => 'fas fa-unlink',
+        ));
+        $this->addCmdIfMissing('derniere_erreur', 'Dernière erreur', 'info', 'string', array(
+            'order'     => $order++,
+            'isVisible' => 0,
+        ));
         $this->addCmdIfMissing('refresh', 'Rafraîchir', 'action', 'other', array(
             'order' => $order++,
             'icon'  => 'fas fa-sync',
@@ -335,6 +379,10 @@ class swdebe extends eqLogic {
      * sur la classe. La page envoie toujours une clé « cmd » portant les
      * lignes du tableau des commandes : setCmd() privée tuerait l'enregistrement
      * sur une erreur fatale, avant toute écriture.
+     *
+     * Pendant une erreur de lecture, l'ancien état est republié avec une date
+     * à false : une valeur inchangée ne rafraîchit plus la dernière
+     * communication de l'équipement, et le timeout du coeur peut jouer.
      */
     private function publishCmd($_logicalId, $_value) {
         if ($_value === '') {
@@ -343,7 +391,7 @@ class swdebe extends eqLogic {
                 return;
             }
         }
-        $this->checkAndUpdateCmd($_logicalId, $_value);
+        $this->checkAndUpdateCmd($_logicalId, $_value, $this->_stale ? false : null);
     }
 
     /* ============================================================== RAFRAICHISSEMENT */
@@ -376,11 +424,7 @@ class swdebe extends eqLogic {
             $this->_refreshInfo = __('Lecture ignorée : état mis à jour il y a moins de 5 minutes.', __FILE__);
         }
 
-        $minutes = (int) config::byKey('refresh_minutes', __CLASS__, self::DEFAULT_REFRESH_MINUTES);
-        if ($minutes < self::MIN_REFRESH_MINUTES) {
-            $minutes = self::MIN_REFRESH_MINUTES;
-        }
-        $ttl = $minutes * 60;
+        $ttl = self::refreshTtl();
         $waiting = (cache::byKey($this->retryKey())->getValue('') !== '');
         if ($waiting && $_force) {
             // Backoff en cours : on refuse même un forçage, et on le dit.
@@ -394,6 +438,7 @@ class swdebe extends eqLogic {
                 $state = $fresh;
                 cache::set($this->stateKey(), json_encode($state), 0);
                 cache::delete($this->retryKey());
+                cache::delete($this->errorKey());
 
                 /*
                  * Détection événementielle des nouveaux incidents : on diffère
@@ -415,15 +460,87 @@ class swdebe extends eqLogic {
                  */
                 $this->_refreshError = $e->getMessage();
                 cache::set($this->retryKey(), time(), self::RETRY_DELAY);
+                cache::set($this->errorKey(), json_encode(array('message' => $e->getMessage(), 'at' => time())), 0);
                 log::add(__CLASS__, 'error', $this->getHumanName() . ' : ' . $e->getMessage());
                 if (empty($state)) {
+                    $this->refreshStatus($state);
                     throw $e;
                 }
             }
         }
 
+        $this->refreshStatus($state);
         $this->refreshCommands($state);
         return $state;
+    }
+
+    /*
+     * « Dernière vérification » = date de la dernière lecture réussie du site,
+     * celle de l'état en cache : un état resservi sans relecture (TTL, backoff)
+     * garde la date du succès dont il vient. L'erreur, elle, reste levée tant
+     * qu'aucune lecture n'a réussi depuis.
+     */
+    private function refreshStatus($_state) {
+        $error = $this->getLastError();
+        $this->_stale = !empty($error);
+        $this->publishCmd('derniere_verification', isset($_state['fetchedAt']) ? date('d/m/Y H:i', (int) $_state['fetchedAt']) : '');
+        $this->publishCmd('erreur', $this->_stale ? 1 : 0);
+        $this->publishCmd('derniere_erreur', $this->_stale
+            ? date('d/m/Y H:i', (int) $error['at']) . ' — ' . $error['message']
+            : '');
+    }
+
+    public static function refreshTtl() {
+        $minutes = (int) config::byKey('refresh_minutes', __CLASS__, self::DEFAULT_REFRESH_MINUTES);
+        return max($minutes, self::MIN_REFRESH_MINUTES) * 60;
+    }
+
+    /* ======================================================================= SANTÉ */
+
+    /*
+     * Page Santé : âge de la dernière lecture réussie et dernière erreur,
+     * lus dans le cache sans interroger swde.be. Une lecture est « en retard »
+     * au-delà d'un cycle plus un backoff complet : avant, un échec isolé est
+     * encore en train d'être retenté normalement.
+     */
+    public static function health() {
+        $eqLogics = array_values(array_filter(self::byType(__CLASS__, true), function ($_eq) {
+            return $_eq->isConfigured();
+        }));
+        $late   = self::refreshTtl() + self::RETRY_DELAY;
+        $ages   = array();
+        $errors = array();
+        $ok     = true;
+        foreach ($eqLogics as $eqLogic) {
+            $state = $eqLogic->getState();
+            if (isset($state['fetchedAt'])) {
+                $age = time() - (int) $state['fetchedAt'];
+                $ages[] = $eqLogic->getHumanName() . ' : ' . date('d/m H:i', (int) $state['fetchedAt'])
+                        . ' (' . sprintf(__('il y a %d min', __FILE__), intdiv($age, 60)) . ')';
+                $ok = $ok && $age <= $late;
+            } else {
+                $ages[] = $eqLogic->getHumanName() . ' : ' . __('jamais', __FILE__);
+                $ok = false;
+            }
+            $error = $eqLogic->getLastError();
+            if (!empty($error)) {
+                $errors[] = $eqLogic->getHumanName() . ' : ' . date('d/m H:i', (int) $error['at']) . ' — ' . $error['message'];
+            }
+        }
+        return array(
+            array(
+                'test'   => __('Dernière lecture réussie', __FILE__),
+                'result' => empty($ages) ? __('Aucun équipement configuré', __FILE__) : htmlspecialchars(implode(' ; ', $ages), ENT_QUOTES),
+                'advice' => $ok ? '' : __('Aucune lecture réussie de swde.be depuis plus d\'un cycle et d\'un backoff : les incidents affichés peuvent être périmés.', __FILE__),
+                'state'  => $ok,
+            ),
+            array(
+                'test'   => __('Erreurs de lecture', __FILE__),
+                'result' => empty($errors) ? __('Aucune', __FILE__) : htmlspecialchars(implode(' ; ', $errors), ENT_QUOTES),
+                'advice' => empty($errors) ? '' : __('Nouvelle tentative une heure après chaque échec ; voir le journal swdebe.', __FILE__),
+                'state'  => empty($errors),
+            ),
+        );
     }
 
     public function getRefreshError() {

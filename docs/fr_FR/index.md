@@ -51,6 +51,9 @@ commandes.
 | **Localité** | info / string | commune/village précisé par la SWDE |
 | **URL de l'incident** | info / string | lien direct vers la page SWDE |
 | **Détails (JSON)** | info / string | liste complète des incidents, structurée |
+| **Dernière vérification** | info / string | date de la dernière lecture réussie de swde.be |
+| **Erreur de lecture** | info / binary | 1 tant que la dernière lecture a échoué (les incidents affichés sont alors ceux de la dernière vérification) |
+| **Dernière erreur** | info / string | date et message de l'échec en cours, vide sinon |
 | **Rafraîchir** | action | force une relecture immédiate |
 
 ## Scénarios typiques

@@ -1,7 +1,7 @@
 {
     "id": "swdebe",
     "name": "SWDE",
-    "pluginVersion": "0.2.1",
+    "pluginVersion": "0.2.2",
     "description": {
         "fr_FR": "Surveille les incidents et interventions du réseau d'eau publié par la SWDE (Société Wallonne des Eaux) pour un ou plusieurs codes postaux. Renseignez le code postal : le plugin interroge périodiquement swde.be, détecte les coupures d'eau, les baisses de pression et les problèmes de qualité en cours sur la commune, et expose des commandes info — état, nombre d'incidents, titre, perturbation, dates de début et de fin prévues, localité, lien direct — exploitables en scénario pour notification, message vocal ou affichage dashboard.",
         "en_US": "Monitors ongoing water network incidents published by SWDE (Walloon Water Company) for one or several Belgian postal codes. Enter the postal code: the plugin periodically scrapes swde.be, detects water cuts, pressure drops and quality issues currently reported for the area, and exposes info commands — state, incident count, title, disturbance type, start/end timestamps, locality, direct link — usable in scenarios for notifications, spoken messages or dashboard display."
