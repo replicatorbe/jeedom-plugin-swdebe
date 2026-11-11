@@ -2,6 +2,9 @@
     "plugins/swdebe/core/class/swdebe.class.php": {
         "Code postal invalide : quatre chiffres attendus.": "Invalid postal code: four digits expected.",
         "Erreur réseau SWDE : ": "SWDE network error: ",
+        "lecture en échec %d fois de suite :": "read failed %d times in a row:",
+        "échec n° %d": "failure #%d",
+        "lecture rétablie après %d échecs.": "reading back after %d failures.",
         "HTTP ": "HTTP ",
         "sur": "on",
         "Incident en cours": "Ongoing incident",

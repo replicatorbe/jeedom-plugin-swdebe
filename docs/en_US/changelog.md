@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.3
+
+- An isolated failed read of swde.be is no longer logged as an error, and so
+  no longer creates an entry in the message centre: it is a warning. The error
+  is only raised on the third failure in a row, once, and the return to normal
+  is then reported in the log.
+- A call failing on the network (timeout, DNS) is retried once straight away
+  before giving up.
+- Default request timeout raised from 10 to 20 seconds.
+- A failed read with no known state is no longer logged twice.
+- The message the core posts for that error in the message centre is removed
+  on the first successful read.
+
 ## 0.2.2
 
 - New **Last check**, **Read error** and **Last error** commands: when swde.be

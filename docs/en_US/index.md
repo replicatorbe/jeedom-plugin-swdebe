@@ -23,7 +23,8 @@ configured postal codes, and updates its commands accordingly.
 ### Plugin settings
 
 - **Request timeout**: seconds before giving up on an HTTP call to the SWDE
-  site (default 10).
+  site (default 20). A call failing on the network (timeout, DNS) is retried
+  once straight away.
 - **Refresh frequency**: minutes between two reads (default and minimum 15:
   the plugin never reads the site more often).
 

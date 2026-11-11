@@ -23,7 +23,10 @@ class swdebe extends eqLogic {
     const WORKS_URL        = 'https://www.swde.be/fr/works?text=';
     const AUTOCOMPLETE_URL = 'https://www.swde.be/fr/search_api_autocomplete/search?display=page_search&filter=keywords&q=';
 
-    const DEFAULT_TIMEOUT  = 10;
+    /* 20 s : le site met parfois plus de 10 s à répondre, puis redevient
+     * rapide (quatre « Operation timed out after 10002 milliseconds » les
+     * 10 et 11/11/2026). */
+    const DEFAULT_TIMEOUT  = 20;
     const USER_AGENT       = 'Jeedom-SWDE-Plugin/0.1 (+https://github.com/replicatorbe/jeedom-plugin-swdebe)';
 
     /*
@@ -43,6 +46,15 @@ class swdebe extends eqLogic {
     /* Après un échec, on laisse le service tranquille une heure : c'est au
      * moment où il va le plus mal qu'il ne faut pas le marteler. */
     const RETRY_DELAY = 3600;
+
+    /*
+     * Une lecture ratée isolée n'est pas une panne : swde.be laisse filer un
+     * délai de temps en temps, et la lecture suivante passe. Journalisée en
+     * « error », chacune créait un message dans le centre de messages pour
+     * rien. On avertit donc, et l'erreur ne tombe qu'au troisième échec
+     * d'affilée — une seule fois : le message dit déjà tout.
+     */
+    const FAILURE_ERROR_AFTER = 3;
 
     /* Un détail d'incident n'évolue pratiquement pas une fois l'intervention
      * annoncée : six heures de cache évitent de retélécharger la même page à
@@ -108,7 +120,10 @@ class swdebe extends eqLogic {
                 $eqLogic->update();
             } catch (Throwable $e) {
                 // Un code postal en échec ne doit pas priver les autres de leur mise à jour.
-                log::add(__CLASS__, 'error', $eqLogic->getHumanName() . ' : ' . $e->getMessage());
+                // Une lecture ratée est déjà journalisée par update(), au bon niveau.
+                if ($eqLogic->getRefreshError() === '') {
+                    log::add(__CLASS__, 'error', $eqLogic->getHumanName() . ' : ' . $e->getMessage());
+                }
             }
         }
     }
@@ -171,7 +186,10 @@ class swdebe extends eqLogic {
             } catch (Throwable $e) {
                 // L'enregistrement ne doit pas échouer parce que le service est
                 // indisponible : le code postal est valide, le cron réessaiera.
-                log::add(__CLASS__, 'error', $this->getHumanName() . ' : ' . $e->getMessage());
+                // Une lecture ratée est déjà journalisée par update(), au bon niveau.
+                if ($this->getRefreshError() === '') {
+                    log::add(__CLASS__, 'error', $this->getHumanName() . ' : ' . $e->getMessage());
+                }
             }
         }
     }
@@ -208,10 +226,53 @@ class swdebe extends eqLogic {
         return 'swdebe::error::' . $this->getId();
     }
 
+    /* Nombre de lectures ratées d'affilée, remis à zéro au premier succès. */
+    private function failuresKey() {
+        return 'swdebe::failures::' . $this->getId();
+    }
+
     private function clearState() {
         cache::delete($this->stateKey());
         cache::delete($this->retryKey());
         cache::delete($this->errorKey());
+        cache::delete($this->failuresKey());
+        message::removeAll(__CLASS__, $this->failureMessageId());
+    }
+
+    private function failureMessageId() {
+        return 'network' . $this->getId();
+    }
+
+    /* Avertissement pour un échec isolé, erreur au troisième d'affilée. */
+    private function noteFailure($_message) {
+        $count = (int) cache::byKey($this->failuresKey())->getValue(0) + 1;
+        cache::set($this->failuresKey(), $count, 0);
+        if ($count === self::FAILURE_ERROR_AFTER) {
+            /* Identifiant stable : le message que le coeur pose pour cette
+             * erreur (option « message à chaque erreur ») est retiré au
+             * premier succès, au lieu de rester après le retour du service. */
+            log::add(__CLASS__, 'error', $this->getHumanName() . ' : '
+                     . sprintf(__('lecture en échec %d fois de suite :', __FILE__), $count) . ' ' . $_message,
+                     $this->failureMessageId());
+            return;
+        }
+        log::add(__CLASS__, 'warning', $this->getHumanName() . ' : ' . $_message
+                 . ' (' . sprintf(__('échec n° %d', __FILE__), $count) . ')');
+    }
+
+    /* Première lecture aboutie : le compteur repart de zéro. Le retour n'est
+     * annoncé que si l'erreur l'avait été. */
+    private function clearFailures() {
+        $count = (int) cache::byKey($this->failuresKey())->getValue(0);
+        if ($count === 0) {
+            return;
+        }
+        cache::delete($this->failuresKey());
+        if ($count >= self::FAILURE_ERROR_AFTER) {
+            message::removeAll(__CLASS__, $this->failureMessageId());
+            log::add(__CLASS__, 'info', $this->getHumanName() . ' : '
+                     . sprintf(__('lecture rétablie après %d échecs.', __FILE__), $count));
+        }
     }
 
     /* { message, at } de la dernière lecture en échec, ou un tableau vide si
@@ -439,6 +500,7 @@ class swdebe extends eqLogic {
                 cache::set($this->stateKey(), json_encode($state), 0);
                 cache::delete($this->retryKey());
                 cache::delete($this->errorKey());
+                $this->clearFailures();
 
                 /*
                  * Détection événementielle des nouveaux incidents : on diffère
@@ -461,7 +523,7 @@ class swdebe extends eqLogic {
                 $this->_refreshError = $e->getMessage();
                 cache::set($this->retryKey(), time(), self::RETRY_DELAY);
                 cache::set($this->errorKey(), json_encode(array('message' => $e->getMessage(), 'at' => time())), 0);
-                log::add(__CLASS__, 'error', $this->getHumanName() . ' : ' . $e->getMessage());
+                $this->noteFailure($e->getMessage());
                 if (empty($state)) {
                     $this->refreshStatus($state);
                     throw $e;
@@ -1226,7 +1288,22 @@ class swdebe extends eqLogic {
 
     /* ======================================================================= HTTP */
 
+    /*
+     * Un délai dépassé ou une résolution DNS ratée vers swde.be est le plus
+     * souvent passager : on retente une fois, tout de suite, avant de
+     * conclure à l'échec — qui coûte une heure sans lecture (RETRY_DELAY).
+     * Une réponse HTTP d'erreur, elle, n'est pas retentée : le site a répondu.
+     */
     private static function httpGet($_url) {
+        try {
+            return self::httpGetOnce($_url);
+        } catch (swdebeNetworkException $e) {
+            log::add(__CLASS__, 'debug', 'Nouvel essai immédiat : ' . $_url . ' ' . $e->getMessage());
+            return self::httpGetOnce($_url);
+        }
+    }
+
+    private static function httpGetOnce($_url) {
         $timeout = (int) config::byKey('http_timeout', __CLASS__, self::DEFAULT_TIMEOUT);
         if ($timeout <= 0) {
             $timeout = self::DEFAULT_TIMEOUT;
@@ -1251,7 +1328,7 @@ class swdebe extends eqLogic {
         curl_close($ch);
 
         if ($body === false) {
-            throw new Exception(__('Erreur réseau SWDE : ', __FILE__) . $err);
+            throw new swdebeNetworkException(__('Erreur réseau SWDE : ', __FILE__) . $err);
         }
         if ($code >= 400) {
             throw new Exception(__('HTTP ', __FILE__) . $code . ' ' . __('sur', __FILE__) . ' ' . $_url);
@@ -1297,6 +1374,10 @@ class swdebe extends eqLogic {
             'titres'   => array_slice(array_column($actifs, 'text'), 0, 5),
         );
     }
+}
+
+/* Échec réseau (délai, DNS, connexion) : le seul que httpGet() retente. */
+class swdebeNetworkException extends Exception {
 }
 
 class swdebeCmd extends cmd {

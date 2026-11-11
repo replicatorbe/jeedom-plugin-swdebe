@@ -1,5 +1,18 @@
 # Journal des versions
 
+## 0.2.3
+
+- Une lecture ratée isolée de swde.be n'est plus journalisée en erreur, et ne
+  crée donc plus de message dans le centre de messages : c'est un
+  avertissement. L'erreur n'est levée qu'au troisième échec d'affilée, une
+  seule fois, et le retour à la normale est alors signalé dans le journal.
+- Un appel en échec réseau (délai dépassé, DNS) est retenté une fois aussitôt
+  avant de conclure à l'échec.
+- Délai d'attente par défaut porté de 10 à 20 secondes.
+- Une lecture en échec sans état connu n'est plus journalisée deux fois.
+- Le message que le coeur pose pour cette erreur au centre de messages est
+  retiré au premier succès.
+
 ## 0.2.2
 
 - Nouvelles commandes **Dernière vérification**, **Erreur de lecture** et **Dernière

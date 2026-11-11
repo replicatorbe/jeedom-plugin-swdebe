@@ -9,10 +9,10 @@ if (!isConnect('admin')) {
 		<div class="form-group">
 			<label class="col-md-4 control-label">{{Délai d'attente des requêtes}}</label>
 			<div class="col-md-2">
-				<input type="number" class="configKey form-control" data-l1key="http_timeout" placeholder="10">
+				<input type="number" class="configKey form-control" data-l1key="http_timeout" placeholder="20">
 			</div>
 			<div class="col-md-5">
-				<span class="help-block" style="margin:0;">{{Secondes avant d'abandonner un appel à swde.be. 10 convient dans la quasi-totalité des cas.}}</span>
+				<span class="help-block" style="margin:0;">{{Secondes avant d'abandonner un appel à swde.be. 20 par défaut ; un appel qui échoue sur le réseau est retenté une fois aussitôt.}}</span>
 			</div>
 		</div>
 		<div class="form-group">

@@ -24,7 +24,8 @@ commandes.
 ### Paramètres du plugin
 
 - **Délai d'attente des requêtes** : secondes avant d'abandonner un appel au
-  site SWDE (défaut 10).
+  site SWDE (défaut 20). Un appel en échec réseau (délai, DNS) est retenté
+  une fois aussitôt.
 - **Fréquence de rafraîchissement** : minutes entre deux lectures (défaut et
   minimum 15 : le plugin ne lit pas le site plus souvent).
 
